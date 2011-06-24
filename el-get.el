@@ -3154,6 +3154,150 @@ matching REGEX with TYPE and ARGS as parameter."
         (with-current-buffer standard-output
           (buffer-string))))))
 
+;;
+;; Package list. This code is derived from Emacs 24's `package.el'.
+;;
+
+(defvar el-get-package-menu-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map tabulated-list-mode-map)
+    (define-key map "i" #'el-get-package-menu-install)
+    (define-key map "r" #'el-get-package-menu-remove)
+    (define-key map "U" #'el-get-package-menu-update-all)
+    (define-key map "u" #'el-get-package-menu-update)
+    (define-key map "d" #'el-get-package-menu-describe)
+    map))
+
+(when (featurep 'easymenu)
+  (require 'easymenu)
+  (easy-menu-define el-get-pacakge-menu-mode-menu el-get-package-menu-mode-map
+    "el-get package menu"
+    '("El-get"
+      ["Install" el-get-package-menu-install t]
+      ["Remove" el-get-package-menu-remove t]
+      ["Update" el-get-package-menu-update t]
+      ["Describe" el-get-package-menu-describe t]
+      "--"
+      ["Update all" el-get-package-menu-update-all t])))
+
+(define-derived-mode el-get-package-menu-mode tabulated-list-mode
+  "el-get Package Menu"
+  "Major mode for browsing a list of packages.
+Letters do not insert themselves; instead, they are commands.
+\\<package-menu-mode-map>
+\\{package-menu-mode-map}"
+  (setq tabulated-list-format [("Package" 18 el-get-package-sort-package)
+			       ("Status"  10 t)
+			       ("Description" 0 nil)])
+  (setq tabulated-list-padding 2)
+  (setq tabulated-list-sort-key (cons "Status" nil))
+  (tabulated-list-init-header))
+
+(defun el-get-package-sort-package (a b)
+  (string< (car a) (car b)))
+
+(defgroup el-get-faces nil
+  "Customize the appearance of el-get-list-packages"
+  :prefix "el-get-"
+  :group 'faces
+  :group 'el-get)
+
+(defface el-get-installed-face
+  '((t :inherit 'font-lock-comment-face)) ; use same face as `package.el'
+  "Face for installed packages"
+  :group 'el-get-faces)
+
+(defface el-get-required-face
+  '((t :inherit 'el-get-installed-face))
+  "Face for required packages"
+  :group 'el-get-faces)
+
+(defface el-get-available-face
+  '((t :inherit 'default))
+  "Face for packages that are not installed."
+  :group 'el-get-faces)
+
+(defface el-get-removed-face
+  '((t :inherit 'el-get-available-face))
+  "Face for removed packages"
+  :group 'el-get-faces)
+
+(defun el-get-package-menu-describe (&optional button)
+  (interactive)
+  (let ((package (if button
+                     (button-get button 'package-symbol)
+                   (tabulated-list-get-id))))
+    (when package
+      (el-get-describe package))))
+
+(defun el-get-package-menu-install (&optional button)
+  (interactive)
+  (let ((package (if button
+                     (button-get button 'package-symbol)
+                   (tabulated-list-get-id))))
+    (when (and package
+               (y-or-n-p (format "Do you really want to install `%s'?"
+                                 package)))
+      (el-get-install package))))
+
+(defun el-get-package-menu-remove (&optional button)
+  (interactive)
+  (let ((package (if button
+                     (button-get button 'package-symbol)
+                   (tabulated-list-get-id))))
+    (when (and package
+               (y-or-n-p (format "Do you really want to remove `%s'?"
+                                 package)))
+      (el-get-remove package))))
+
+(defun el-get-package-menu-update (&optional button)
+  (interactive)
+  (let ((package (if button
+                     (button-get button 'package-symbol)
+                   (tabulated-list-get-id))))
+    (when (and package
+               (y-or-n-p (format "Do you really want to update `%s'?"
+                                 package)))
+      (el-get-update package))))
+
+(defun el-get-package-menu-update-all ()
+  (interactive)
+  (when (y-or-n-p "Do you really want to update all installed packages?")
+    (el-get-update-all)))
+
+(defun el-get-package-menu--print-info (package)
+  (let* ((psym (el-get-as-symbol package))
+         (pname (symbol-name psym))
+         (status (or (el-get-read-package-status package) "available"))
+         (def (el-get-package-def pname))
+         (name (plist-get def :name))
+         (descr (or (plist-get def :description) ""))
+         (face (cond
+                ((string= status "installed") 'el-get-installed-face)
+                ((string= status "required") 'el-get-required-face)
+                ((string= status "removed") 'el-get-removed-face)
+                (t 'el-get-available-face))))
+    (list pname (vector (list pname 'face 'link 'follow-link t
+                              'package-symbol package
+                              'action 'el-get-package-menu-describe)
+                        (propertize status 'font-lock-face face)
+                        descr))))
+
+(defun el-get-package-menu--generate (&optional remember-pos packages)
+  (let ((p (or packages (el-get-read-all-recipe-names))))
+    (setq tabulated-list-entries
+          (mapcar #'el-get-package-menu--print-info p))
+    (tabulated-list-print remember-pos)))
+
+(defun el-get-list-packages ()
+  "List all known recipes in a new buffer. Similar to `list-packages'."
+  (interactive)
+  (let ((buf (get-buffer-create "*Packages*")))
+    (with-current-buffer buf
+      (el-get-package-menu-mode)
+      (el-get-package-menu--generate nil '("magit" "codepad" "distel" "el-get"))) ;DBG
+    (switch-to-buffer buf)))
+
 
 ;;
 ;; User Interface, Non Interactive part
