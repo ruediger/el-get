@@ -1,0 +1,4 @@
+(:name info+
+       :type emacswiki
+       :website "http://www.emacswiki.org/emacs/InfoPlus"
+       :description "Extensions to `info.el'.")
